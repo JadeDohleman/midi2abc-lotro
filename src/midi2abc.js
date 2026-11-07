@@ -777,9 +777,12 @@ function setInstrumentHeader(
   const numerator = timeSignature.numerator;
   const denominator = timeSignature.denominator;
   const baseTitle = (options && options.title) ? options.title : "Untitled";
-  const partSuffix = totalParts > 1
-    ? ` - Part ${partNumber}${ins[0].isDrum ? " (Drums)" : ""}`
-    : "";
+  let partSuffix = "";
+  if (partNumber === 0) {
+    partSuffix = " - Solo";
+  } else if (totalParts > 1) {
+    partSuffix = ` - Part ${partNumber}${ins[0].isDrum ? " (Drums)" : ""}`;
+  }
   let header = `X:${partNumber}\n`;
   header += `T:${baseTitle}${partSuffix}\n`;
   if (options && options.composer) {
@@ -793,10 +796,34 @@ function setInstrumentHeader(
   return header;
 }
 
+function buildSoloSegment(melodicSegments, drumSegments) {
+  const sourceSegments = melodicSegments.length > 0 ? melodicSegments : drumSegments;
+  if (sourceSegments.length == 0) return [];
+  const merged = [];
+  const primaryProgram = sourceSegments[0][0].program;
+  const primaryIsDrum = sourceSegments[0][0].isDrum;
+  for (let i = 0; i < sourceSegments.length; i++) {
+    const seg = sourceSegments[i];
+    for (let j = 0; j < seg.length; j++) {
+      const n = cloneNote(seg[j]);
+      n.instrument = -1;
+      n.program = primaryProgram;
+      n.isDrum = primaryIsDrum;
+      merged.push(n);
+    }
+  }
+  merged.sort((a, b) => {
+    if (a.startTick !== b.startTick) return a.startTick - b.startTick;
+    if (a.endTick !== b.endTick) return a.endTick - b.endTick;
+    return a.pitch - b.pitch;
+  });
+  return merged;
+}
+
 export default function notesToAbc(ns, options) {
   if (!ns.notes || ns.notes.length == 0) {
     const baseTitle = (options && options.title) ? options.title : "Untitled";
-    return `X:1\nT:${baseTitle}\nM:4/4\nL:1/16\nQ:1/4=120\nK:C\nz4\n`;
+    return `X:0\nT:${baseTitle} - Solo\nM:4/4\nL:1/16\nQ:1/4=120\nK:C\nz4\n\nX:1\nT:${baseTitle}\nM:4/4\nL:1/16\nQ:1/4=120\nK:C\nz4\n`;
   }
   cleanupTicks(ns);
   const tempo = getPrimaryTempo(ns.tempos, ns.totalTicks);
@@ -809,6 +836,20 @@ export default function notesToAbc(ns, options) {
   const instrumentSegments = [...melodic, ...drums];
 
   const parts = [];
+  const soloSegment = buildSoloSegment(melodic, drums);
+  if (soloSegment.length > 0) {
+    section = 0;
+    const soloPartStr = segmentToString(
+      ns,
+      soloSegment,
+      0,
+      tempo,
+      options,
+      instrumentSegments.length,
+    );
+    if (soloPartStr) parts.push(soloPartStr.trimEnd());
+  }
+
   for (let i = 0; i < instrumentSegments.length; i++) {
     section = 0;
     const partStr = segmentToString(
