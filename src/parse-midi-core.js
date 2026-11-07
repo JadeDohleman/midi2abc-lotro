@@ -188,7 +188,7 @@ export function quantizeTicks(ns, division = 8) {
   for (let i = 0; i < ns.notes.length; i++) {
     if (ns.notes[i].endTick > totalTicks) totalTicks = ns.notes[i].endTick;
   }
-  if (totalTicks > ns.totalTicks) ns.totalTicks = totalTicks;
+  ns.totalTicks = totalTicks;
   return ns;
 }
 
@@ -197,21 +197,18 @@ function alignmentRatio(ns, division) {
   const grid = ns.ticksPerBeat / division;
   let onGrid = 0;
   for (let i = 0; i < ns.notes.length; i++) {
-    if (ns.notes[i].startTick % grid === 0) onGrid++;
+    if (
+      ns.notes[i].startTick % grid === 0 &&
+      ns.notes[i].endTick % grid === 0
+    ) {
+      onGrid++;
+    }
   }
   return onGrid / ns.notes.length;
 }
 
-// Only quantizes if the file doesn't already look grid-aligned. A properly
-// notated/quantized file (even one using triplets, which are legitimately
-// off this power-of-2 grid) will already have the vast majority of notes
-// landing exactly on grid ticks; blindly quantizing it would snap those
-// triplets onto the wrong, nearby grid position and corrupt them. A
-// human-performed, non-quantized file has no such alignment (note starts
-// land more or less uniformly at any tick offset), so snapping every note
-// to the nearest grid line is the right call there.
-export function autoQuantizeTicks(ns, division = 8, threshold = 0.9) {
-  if (alignmentRatio(ns, division) < threshold) {
+export function autoQuantizeTicks(ns, division = 8, threshold = 1.0) {
+  if (alignmentRatio(ns, division) <= threshold) {
     quantizeTicks(ns, division);
   }
   return ns;
